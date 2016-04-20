@@ -6,7 +6,7 @@
 
 Gem::Specification.new do |s|
   s.name = "jenkins_api_client"
-  s.version = "1.4.5"
+  s.version = "1.4.5.gdc1"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.require_paths = ["lib"]
@@ -103,6 +103,8 @@ Gem::Specification.new do |s|
       s.add_runtime_dependency(%q<mixlib-shellout>, [">= 1.1.0"])
       s.add_runtime_dependency(%q<socksify>, [">= 1.7.0"])
       s.add_runtime_dependency(%q<json>, ["~> 1.0"])
+      s.add_runtime_dependency(%q<curb>, [">= 0.9.0"])
+      s.add_runtime_dependency(%q<httpi>, [">= 2.4.0"])
       s.add_development_dependency(%q<bundler>, [">= 1.0"])
       s.add_development_dependency(%q<rspec>, ["~> 2.14.1"])
       s.add_development_dependency(%q<simplecov>, [">= 0"])
@@ -113,6 +115,8 @@ Gem::Specification.new do |s|
       s.add_development_dependency(%q<jeweler>, [">= 0"])
       s.add_development_dependency(%q<rack>, ["~> 1.0"])
     else
+      s.add_dependency(%q<curb>, [">= 0.9.0"])
+      s.add_dependency(%q<httpi>, [">= 2.4.0"])
       s.add_dependency(%q<nokogiri>, ["~> 1.6.0"])
       s.add_dependency(%q<thor>, [">= 0.16.0"])
       s.add_dependency(%q<terminal-table>, [">= 1.4.0"])
