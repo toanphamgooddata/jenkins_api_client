@@ -109,14 +109,14 @@ module JenkinsApi
       # @param [Hash] params parameters for creating a dumb slave
       #  * +:name+ name of the slave
       #  * +:description+ description of the new slave
-      #  * +:executors+ number of executors
-      #  * +:remote_fs+ Remote FS root
-      #  * +:labels+ comma separated list of labels
+      #  * +:numexecutors+ number of executors
+      #  * +:remotefs+ Remote FS root
+      #  * +:label+ comma separated list of label
       #  * +:mode+ mode of the slave: normal, exclusive
-      #  * +:slave_host+ Hostname/IP of the slave
-      #  * +:slave_port+ Slave port
-      #  * +:private_key_file+ Private key file of master
-      #  * +:credentials_id+ Id for credential in Jenkins
+      #  * +:host+ Hostname/IP of the slave
+      #  * +:port+ Slave port
+      #  * +:privatekey+ Private key file of master
+      #  * +:credentialsid+ Id for credential in Jenkins
       #
       # @example Create a Dumb Slave
       #   create_dumb_slave(
@@ -124,11 +124,11 @@ module JenkinsApi
       #     :slave_host => "10.10.10.10",
       #     :private_key_file => "/root/.ssh/id_rsa",
       #     :executors => 10,
-      #     :labels => "slave, ruby"
+      #     :label => "slave, ruby"
       #   )
       #
       def create_dumb_slave(params)
-        unless params[:name] && params[:slave_host] && params[:private_key_file]
+        unless params[:name] && params[:host] && params[:privatekey]
           raise ArgumentError, "Name, slave host, and private key file are" +
             " required for creating a slave."
         end
@@ -137,17 +137,17 @@ module JenkinsApi
         @logger.debug "Creating a dumb slave with params: #{params.inspect}"
         default_params = {
           :description => "Automatically created through jenkins_api_client",
-          :executors => 2,
-          :remote_fs => "/var/jenkins",
-          :labels => params[:name],
-          :slave_port => 22,
+          :numexecutors => 2,
+          :remotefs => "/var/jenkins",
+          :label => params[:name],
+          :port => 22,
           :mode => "normal",
-          :private_key_file => "",
-          :credentials_id => ""
+          :privatekey => "",
+          :credentialsid => ""
         }
 
         params = default_params.merge(params)
-        labels = params[:labels].split(/\s*,\s*/).join(" ")
+        label = params[:label].split(/\s*,\s*/).join(" ")
         mode = params[:mode].upcase
 
         post_params = {
@@ -156,9 +156,9 @@ module JenkinsApi
           "json" => {
             "name" => params[:name],
             "nodeDescription" => params[:description],
-            "numExecutors" => params[:executors],
-            "remoteFS" => params[:remote_fs],
-            "labelString" => labels,
+            "numExecutors" => params[:numexecutors],
+            "remoteFS" => params[:remotefs],
+            "labelString" => label,
             "mode" => mode,
             "type" => "hudson.slaves.DumbSlave$DescriptorImpl",
             "retentionStrategy" => {
@@ -169,11 +169,13 @@ module JenkinsApi
             },
             "launcher" => {
               "stapler-class" => "hudson.plugins.sshslaves.SSHLauncher",
-              "host" => params[:slave_host],
-              "port" => params[:slave_port],
-              "username" => params[:slave_user],
-              "privatekey" => params[:private_key_file],
-              "credentialsId" => params[:credentials_id]
+              "host" => params[:host],
+              "port" => params[:port],
+              "username" => params[:username],
+              "privatekey" => params[:privatekey],
+              "credentialsId" => params[:credentialsid],
+              "jvmOptions" => params[:jvmoptions],
+              "javaPath" => params[:javapath]
             }
           }.to_json
         }
