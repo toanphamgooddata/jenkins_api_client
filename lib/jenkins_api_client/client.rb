@@ -30,6 +30,8 @@ require 'mixlib/shellout'
 require 'uri'
 require 'logger'
 require 'socksify/http'
+require 'httpi'
+require 'curb'
 
 # The main module that contains the Client class and all subclasses that
 # communicate with the Jenkins's Remote Access API.
@@ -68,7 +70,8 @@ module JenkinsApi
       "ssl",
       "follow_redirects",
       "identity_file",
-      "cookies"
+      "cookies",
+      "auth"
     ].freeze
 
     # Initialize a Client object with Jenkins CI server credentials
@@ -120,23 +123,24 @@ module JenkinsApi
 
       # Get info from the server_url, if we got one
       if @server_url
-        server_uri = URI.parse(@server_url)
-        @server_ip = server_uri.host
-        @server_port = server_uri.port
-        @ssl = server_uri.scheme == "https"
-        @jenkins_path = server_uri.path
-
-        # read username and password from the URL
-        # only set if @username and @password are not already set via explicit options
-        @username ||= server_uri.user
-        @password ||= server_uri.password
+        @server_uri = URI.parse(@server_url)
+        @username ||= @server_uri.user
+        @password ||= @server_uri.password
+      else
+        @server_port == 443 ? method = "https" : method = "http"
+        @server_uri = URI.parse("#{method}#{@server_ip}:#{@server_port}#{@jenkins_path}")
       end
+      @server_ip = @server_uri.host
+      @server_port = @server_uri.port
+      @ssl = @server_uri.scheme == "https"
+      @jenkins_path = @server_uri.path
 
       # Username/password are optional as some jenkins servers do not require
       # authentication
       if @username && !(@password || @password_base64)
         raise ArgumentError, "If username is provided, password is required"
       end
+
       if @proxy_ip.nil? ^ @proxy_port.nil?
         raise ArgumentError, "Proxy IP and port must both be specified or" +
           " both left nil"
@@ -150,6 +154,7 @@ module JenkinsApi
       @http_read_timeout = DEFAULT_HTTP_READ_TIMEOUT unless @http_read_timeout
       @ssl ||= false
       @proxy_protocol ||= 'http'
+      HTTPI.adapter = :curb
 
       # Setting log options
       if @logger
@@ -163,6 +168,9 @@ module JenkinsApi
         @logger.level = @log_level
       end
 
+      if @username && (@password || @password_base64)
+         @auth ||= :basic
+      end
       # Base64 decode inserts a newline character at the end. As a workaround
       # added chomp to remove newline characters. I hope nobody uses newline
       # characters at the end of their passwords :)
@@ -270,12 +278,8 @@ module JenkinsApi
     def get_artifact(job_name,filename)
       @artifact = job.find_artifact(job_name)
       uri = URI.parse(@artifact)
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.verify_mode = OpenSSL::SSL::VERIFY_NONE
-      http.use_ssl = @ssl
-      request = Net::HTTP::Get.new(uri.request_uri)
-      request.basic_auth(@username, @password)
-      response = http.request(request)
+      request = HTTPI::Request.new(uri)
+      response = make_http_request(request)
       if response.code == "200"
         File.write(File.expand_path(filename), response.body)
       else
@@ -286,53 +290,59 @@ module JenkinsApi
     # Connects to the Jenkins server, sends the specified request and returns
     # the response.
     #
-    # @param [Net::HTTPRequest] request The request object to send
+    # @param [HTTPI::Request] request The request object to send
     # @param [Boolean] follow_redirect whether to follow redirects or not
     #
-    # @return [Net::HTTPResponse] Response from Jenkins
+    # @return [HTTPI::Response] Response from Jenkins
     #
-    def make_http_request(request, follow_redirect = @follow_redirects)
-      request.basic_auth @username, @password if @username
-      request['Cookie'] = @cookies if @cookies
+    def make_http_request(request, follow_redirect: @follow_redirects, method: :get)
+      case @auth
+        when :basic
+          request.auth.basic @username, @password
+        when :gssapi
+          request.auth.gssnegotiate
+      end
+      request.headers['Cookie'] = @cookies if @cookies
+
+
+      http_prefix="http://"
+      if @ssl
+        http_prefix="https://"
+      end
 
       if @proxy_ip
-        case @proxy_protocol
-        when 'http'
-          http = Net::HTTP::Proxy(@proxy_ip, @proxy_port).new(@server_ip, @server_port)
-        when 'socks'
-          http = Net::HTTP::SOCKSProxy(@proxy_ip, @proxy_port).start(@server_ip, @server_port)
-        else
-          raise "unknwon proxy protocol: '#{@proxy_protocol}'"
-        end
-      else
-        http = Net::HTTP.new(@server_ip, @server_port)
+        request.proxy = "#{http_prefix}#{@proxy_ip}:#{@proxy_port}"
       end
 
-      if @ssl
-        http.use_ssl = true
-        http.verify_mode = OpenSSL::SSL::VERIFY_NONE
+      request.open_timeout = @http_open_timeout
+      request.read_timeout = @http_read_timeout
+      puts "DEBUG URL: #{request.url.inspect}"
+      case method
+        when :get
+          response = HTTPI.get(request)
+        when :post
+          response = HTTPI.post(request)
+        when :put
+          response = HTTPI.put(request)
+        when :delete
+          response = HTTPI.delete(request)
       end
-
-      http.open_timeout = @http_open_timeout
-      http.read_timeout = @http_read_timeout
-
-      response = http.request(request)
-      case response
-        when Net::HTTPRedirection then
+      case response.code
+        when 301, 302
           # If we got a redirect request, follow it (if flag set), but don't
           # go any deeper (only one redirect supported - don't want to follow
           # our tail)
           if follow_redirect
-            redir_uri = URI.parse(response['location'])
-            response = make_http_request(
-              Net::HTTP::Get.new(redir_uri.path, false)
-            )
+            @logger.debug "#{method}: following redirect to #{response.headers['location']}"
+            new_request = request
+            new_request.url = response.headers['location']
+            response = make_http_request(new_request, method: method)
           end
       end
 
       # Pick out some useful header info before we return
-      @jenkins_version = response['X-Jenkins']
-      @hudson_version = response['X-Hudson']
+      @jenkins_version = response.headers['X-Jenkins']
+      @hudson_version = response.headers['X-Hudson']
 
       return response
     end
@@ -341,12 +351,11 @@ module JenkinsApi
     # Obtains the root of Jenkins server. This function is used to see if
     # Jenkins is running
     #
-    # @return [Net::HTTP::Response] Response from Jenkins for "/"
+    # @return [HTTPI::Response] Response from Jenkins for "/"
     #
     def get_root
-      @logger.debug "GET #{@jenkins_path}/"
-      request = Net::HTTP::Get.new("#{@jenkins_path}/")
-      make_http_request(request)
+      @logger.debug "GET #{@server_uri}"
+      make_http_request(HTTPI::Request.new(@server_uri))
     end
 
     # Sends a GET request to the Jenkins CI server with the specified URL
@@ -368,9 +377,12 @@ module JenkinsApi
       else
         to_get = "#{url_prefix}#{url_suffix}"
       end
-      request = Net::HTTP::Get.new(to_get)
-      @logger.debug "GET #{to_get}"
-      response = make_http_request(request)
+      to_get = URI.parse(to_get)
+      uri = @server_uri
+      uri.path = to_get.path
+      uri.query = to_get.query
+      @logger.debug "GET #{uri}"
+      response = make_http_request(HTTPI::Request.new(:url => uri))
       if raw_response
         handle_exception(response, "raw")
       else
@@ -394,13 +406,15 @@ module JenkinsApi
 
         # Added form_data default {} instead of nil to help with proxies
         # that barf with empty post
-        request = Net::HTTP::Post.new("#{@jenkins_path}#{url_prefix}")
-        @logger.debug "POST #{url_prefix}"
+        uri = @server_uri
+        uri.path = "#{@jenkins_path}#{url_prefix}"
+        @logger.debug "POST #{uri}"
+        request = HTTPI::Request.new(:url => uri)
         if @crumbs_enabled
-          request[@crumb["crumbRequestField"]] = @crumb["crumb"]
+          request.headers[@crumb["crumbRequestField"]] = @crumb["crumb"]
         end
-        request.set_form_data(form_data)
-        response = make_http_request(request)
+        request.body = URI.encode_www_form(form_data)
+        response = make_http_request(request, method: :post)
         if raw_response
           handle_exception(response, "raw")
         else
@@ -432,8 +446,10 @@ module JenkinsApi
     # @return [String] XML configuration obtained from Jenkins
     #
     def get_config(url_prefix)
-      request = Net::HTTP::Get.new("#{@jenkins_path}#{url_prefix}/config.xml")
-      @logger.debug "GET #{url_prefix}/config.xml"
+      uri = @server_uri
+      uri.path = "#{@jenkins_path}#{url_prefix}/config.xml"
+      @logger.debug "GET #{uri}"
+      request = HTTPI::Request.new(:url => uri)
       response = make_http_request(request)
       handle_exception(response, "body")
     end
@@ -458,14 +474,16 @@ module JenkinsApi
       begin
         refresh_crumbs
 
-        request = Net::HTTP::Post.new("#{@jenkins_path}#{url_prefix}")
-        @logger.debug "POST #{url_prefix}"
+        uri = @server_uri
+        uri.path = "#{@jenkins_path}#{url_prefix}"
+        @logger.debug "POST #{uri}"
+        request = HTTPI::Request.new(:url => uri)
         request.body = data
-        request.content_type = content_type
+        request.headers['Content-Type'] = content_type
         if @crumbs_enabled
-          request[@crumb["crumbRequestField"]] = @crumb["crumb"]
+          request.headers[@crumb["crumbRequestField"]] = @crumb["crumb"]
         end
-        response = make_http_request(request)
+        response = make_http_request(request, method: :post)
         handle_exception(response)
       rescue Exceptions::ForbiddenException => e
         refresh_crumbs(true)
@@ -727,7 +745,7 @@ module JenkinsApi
     # message with the type of exception and returns the required values if no
     # exceptions are raised.
     #
-    # @param [Net::HTTP::Response] response Response from Jenkins
+    # @param [HTTPI::Response] response Response from Jenkins
     # @param [String] to_send What should be returned as a response. Allowed
     #   values: "code", "body", and "raw".
     # @param [Boolean] send_json Boolean value used to determine whether to

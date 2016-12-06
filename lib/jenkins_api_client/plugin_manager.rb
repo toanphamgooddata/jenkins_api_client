@@ -231,7 +231,7 @@ module JenkinsApi
           end
 
         availables = @client.api_get_request(
-          "/updateCenter/coreSource",
+          "/updateCenter",
           "tree=availables[name,version#{tree_filters}]"
         )["availables"]
         Hash[availables.map do |plugin|
@@ -271,7 +271,7 @@ module JenkinsApi
       #
       def get_available_info(plugin)
         plugins = @client.api_get_request(
-          "/updateCenter/coreSource",
+          "/updateCenter",
           "depth=1"
         )["availables"]
         matched_plugin = plugins.select do |a_plugin|
@@ -303,7 +303,7 @@ module JenkinsApi
       #
       def list_updates
         updates = @client.api_get_request(
-          "/updateCenter/coreSource",
+          "/updateCenter",
           "tree=updates[name,version]"
         )["updates"]
         Hash[updates.map { |plugin| [plugin["name"], plugin["version"]] }]
