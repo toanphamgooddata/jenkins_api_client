@@ -109,14 +109,14 @@ module JenkinsApi
       # @param [Hash] params parameters for creating a dumb slave
       #  * +:name+ name of the slave
       #  * +:description+ description of the new slave
-      #  * +:numexecutors+ number of executors
-      #  * +:remotefs+ Remote FS root
+      #  * +:numExecutors+ number of executors
+      #  * +:remoteFS+ Remote FS root
       #  * +:label+ comma separated list of label
       #  * +:mode+ mode of the slave: normal, exclusive
       #  * +:host+ Hostname/IP of the slave
       #  * +:port+ Slave port
       #  * +:privatekey+ Private key file of master
-      #  * +:credentialsid+ Id for credential in Jenkins
+      #  * +:credentialsId+ Id for credential in Jenkins
       #
       # @example Create a Dumb Slave
       #   create_dumb_slave(
@@ -137,13 +137,13 @@ module JenkinsApi
         @logger.debug "Creating a dumb slave with params: #{params.inspect}"
         default_params = {
           :description => "Automatically created through jenkins_api_client",
-          :numexecutors => 2,
-          :remotefs => "/var/jenkins",
+          :numExecutors => 2,
+          :remoteFS => "/var/jenkins",
           :label => params[:name],
           :port => 22,
           :mode => "normal",
           :privatekey => "",
-          :credentialsid => ""
+          :credentialsId => ""
         }
 
         params = default_params.merge(params)
@@ -156,8 +156,8 @@ module JenkinsApi
           "json" => {
             "name" => params[:name],
             "nodeDescription" => params[:description],
-            "numExecutors" => params[:numexecutors],
-            "remoteFS" => params[:remotefs],
+            "numExecutors" => params[:numExecutors],
+            "remoteFS" => params[:remoteFS],
             "labelString" => label,
             "mode" => mode,
             "type" => "hudson.slaves.DumbSlave$DescriptorImpl",
@@ -173,9 +173,9 @@ module JenkinsApi
               "port" => params[:port],
               "username" => params[:username],
               "privatekey" => params[:privatekey],
-              "credentialsId" => params[:credentialsid],
-              "jvmOptions" => params[:jvmoptions],
-              "javaPath" => params[:javapath]
+              "credentialsId" => params[:credentialsId],
+              "jvmOptions" => params[:jvmOptions],
+              "javaPath" => params[:javaPath]
             }
           }.to_json
         }
