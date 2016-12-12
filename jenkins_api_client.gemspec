@@ -39,6 +39,7 @@ Gem::Specification.new do |s|
     "lib/jenkins_api_client/cli/node.rb",
     "lib/jenkins_api_client/cli/system.rb",
     "lib/jenkins_api_client/client.rb",
+    "lib/jenkins_api_client/credentials_store.rb",
     "lib/jenkins_api_client/exceptions.rb",
     "lib/jenkins_api_client/job.rb",
     "lib/jenkins_api_client/node.rb",

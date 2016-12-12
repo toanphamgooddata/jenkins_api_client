@@ -196,6 +196,15 @@ module JenkinsApi
       JenkinsApi::Client::Job.new(self)
     end
 
+    # Creates an instance to the CredentialStore class by passing a reference
+    # to self
+    #
+    # @return [JenkinsApi::Client::CredentialStore
+    #
+    def credentialStore
+      JenkinsApi::Client::CredentialStore.new(self)
+    end
+
     # Creates an instance to the System class by passing a reference to self
     #
     # @return [JenkinsApi::Client::System] An object to System subclass
