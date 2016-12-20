@@ -304,7 +304,6 @@ module JenkinsApi
       end
       request.headers['Cookie'] = @cookies if @cookies
 
-
       http_prefix="http://"
       if @ssl
         http_prefix="https://"
@@ -316,7 +315,6 @@ module JenkinsApi
 
       request.open_timeout = @http_open_timeout
       request.read_timeout = @http_read_timeout
-      puts "DEBUG URL: #{request.url.inspect}"
       case method
         when :get
           response = HTTPI.get(request)
@@ -378,7 +376,7 @@ module JenkinsApi
         to_get = "#{url_prefix}#{url_suffix}"
       end
       to_get = URI.parse(to_get)
-      uri = @server_uri
+      uri = @server_uri.clone
       uri.path = to_get.path
       uri.query = to_get.query
       @logger.debug "GET #{uri}"
@@ -406,7 +404,7 @@ module JenkinsApi
 
         # Added form_data default {} instead of nil to help with proxies
         # that barf with empty post
-        uri = @server_uri
+        uri = @server_uri.clone
         uri.path = "#{@jenkins_path}#{url_prefix}"
         @logger.debug "POST #{uri}"
         request = HTTPI::Request.new(:url => uri)
@@ -446,7 +444,7 @@ module JenkinsApi
     # @return [String] XML configuration obtained from Jenkins
     #
     def get_config(url_prefix)
-      uri = @server_uri
+      uri = @server_uri.clone
       uri.path = "#{@jenkins_path}#{url_prefix}/config.xml"
       @logger.debug "GET #{uri}"
       request = HTTPI::Request.new(:url => uri)
@@ -474,7 +472,7 @@ module JenkinsApi
       begin
         refresh_crumbs
 
-        uri = @server_uri
+        uri = @server_uri.clone
         uri.path = "#{@jenkins_path}#{url_prefix}"
         @logger.debug "POST #{uri}"
         request = HTTPI::Request.new(:url => uri)
