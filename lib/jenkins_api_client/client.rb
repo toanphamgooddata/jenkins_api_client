@@ -167,6 +167,13 @@ module JenkinsApi
         @logger = Logger.new(@log_location)
         @logger.level = @log_level
       end
+      if @log_level == Logger::DEBUG
+        HTTPI.log_level = :debug
+        HTTPI.logger = @logger
+        HTTPI.log = true
+      else
+        HTTPI.log = false
+      end
 
       if @username && (@password || @password_base64)
          @auth ||= :basic
@@ -315,6 +322,7 @@ module JenkinsApi
 
       request.open_timeout = @http_open_timeout
       request.read_timeout = @http_read_timeout
+      @logger.debug "DEBUG URL: #{request.url.inspect}"
       case method
         when :get
           response = HTTPI.get(request)
