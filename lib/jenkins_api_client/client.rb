@@ -323,7 +323,7 @@ module JenkinsApi
 
       request.open_timeout = @http_open_timeout
       request.read_timeout = @http_read_timeout
-      puts "DEBUG URL: #{request.url.inspect}"
+      @logger.debug "DEBUG URL: #{request.url.inspect}"
       case method
         when :get
           response = HTTPI.get(request)
